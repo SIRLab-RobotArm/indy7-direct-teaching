@@ -1,0 +1,35 @@
+# Teaching Mode Parameters for Indy7 Direct Teaching
+
+direct_teaching_node:
+  ros__parameters:
+    # Data storage directory
+    data_dir: "~/teaching_data"
+
+    # Automatically enable teaching mode on node startup
+    auto_enable_teaching: true
+
+    # Safety parameters
+    collision_check_enabled: true
+    joint_limit_check_enabled: true
+
+    # Joint limits (radians) - Based on Indy7 URDF
+    # These are safety limits, actual robot may have different limits
+    joint_position_limits:
+      joint0_min: -3.14159
+      joint0_max: 3.14159
+      joint1_min: -3.14159
+      joint1_max: 3.14159
+      joint2_min: -3.14159
+      joint2_max: 3.14159
+      joint3_min: -3.14159
+      joint3_max: 3.14159
+      joint4_min: -3.14159
+      joint4_max: 3.14159
+      joint5_min: -3.14159
+      joint5_max: 3.14159
+
+    # Velocity limits (rad/s)
+    max_joint_velocity: 2.0
+
+    # Status publishing rate (Hz)
+    status_publish_rate: 2.0

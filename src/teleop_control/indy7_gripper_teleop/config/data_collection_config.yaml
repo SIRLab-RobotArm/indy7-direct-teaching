@@ -1,0 +1,36 @@
+# Data Collection Configuration for Imitation Learning
+
+# Expected joint state topic
+joint_states_topic: "/joint_states"
+
+# Expected publishing frequency (Hz)
+expected_frequency: 20.0
+
+# Data storage format options
+save_formats:
+  - pickle   # Python pickle format (.pkl)
+  - numpy    # NumPy compressed format (.npz)
+  - json     # Metadata in JSON format
+
+# Data structure
+data_fields:
+  - timestamps        # Relative timestamps from start of episode
+  - joint_positions   # Joint positions in radians
+  - joint_velocities  # Joint velocities in rad/s
+  - joint_efforts     # Joint torques/efforts in N⋅m
+  - joint_names       # Names of joints (e.g., joint0, joint1, ...)
+
+# Metadata to record
+metadata_fields:
+  - episode_id       # Unique episode identifier
+  - duration         # Episode duration in seconds
+  - sample_count     # Number of samples recorded
+  - sample_rate      # Actual sampling rate achieved
+  - robot_type       # Robot model (e.g., indy7)
+  - timestamp        # ISO format timestamp of recording
+  - joint_names      # List of joint names
+
+# Future extensions (not yet implemented)
+# gripper_topic: "/mandro_mark7/status"
+# camera_topic: "/camera/color/image_raw"
+# depth_topic: "/camera/aligned_depth_to_color/image_raw"

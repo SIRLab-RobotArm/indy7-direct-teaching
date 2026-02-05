@@ -1,0 +1,104 @@
+# ROS2 Build and Install Directories
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+.directory
+
+# Teaching Data (collected demonstrations)
+teaching_data/
+*.pkl
+*.npz
+*_metadata.json
+
+# ROS bags
+*.bag
+*.db3
+*.db3-shm
+*.db3-wal
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Test outputs
+test_results/
+*.test
+
+# Documentation build
+docs/_build/
+docs/.buildinfo
+
+# Backup files
+*~
+*.backup
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Colcon
+.colcon_install_layout
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon

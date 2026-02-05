@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:docs.neuromeka.com)",
+      "Bash(chmod:*)",
+      "Bash(source:*)",
+      "Bash(apt list:*)",
+      "Bash(apt-cache policy:*)",
+      "Bash(sudo apt-get install:*)"
+    ]
+  }
+}
