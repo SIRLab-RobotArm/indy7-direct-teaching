@@ -16,6 +16,13 @@ from std_msgs.msg import String
 from indy7_gripper_teleop.teaching_mode_manager import TeachingModeManager
 from indy7_gripper_teleop.data_logger import DataLogger
 
+# Camera support - optional import
+try:
+    from indy7_gripper_teleop.camera_data_logger import CameraDataLogger
+    CAMERA_AVAILABLE = True
+except ImportError:
+    CAMERA_AVAILABLE = False
+
 
 # Keyboard codes
 KEYCODE_SPACE = 0x20  # Start/stop recording
@@ -23,6 +30,9 @@ KEYCODE_Q = 0x71      # Quit
 KEYCODE_R = 0x72      # Reset episode counter
 KEYCODE_H = 0x68      # Move to home
 KEYCODE_C = 0x63      # Clear screen
+KEYCODE_E = 0x65      # Error recovery
+KEYCODE_S = 0x73      # Show status
+KEYCODE_V = 0x76      # Show camera/sync status (V for vision)
 
 
 class KeyboardReader:
@@ -74,13 +84,39 @@ class DirectTeachingNode(Node):
         # Parameters
         self.declare_parameter('data_dir', '~/teaching_data')
         self.declare_parameter('auto_enable_teaching', True)
+        self.declare_parameter('enable_camera', False)  # Camera integration
+        self.declare_parameter('enable_depth', True)    # Depth image recording
+        self.declare_parameter('resize_images', True)   # Resize to 224x224
 
         data_dir = self.get_parameter('data_dir').get_parameter_value().string_value
         auto_enable = self.get_parameter('auto_enable_teaching').get_parameter_value().bool_value
+        enable_camera = self.get_parameter('enable_camera').get_parameter_value().bool_value
+        enable_depth = self.get_parameter('enable_depth').get_parameter_value().bool_value
+        resize_images = self.get_parameter('resize_images').get_parameter_value().bool_value
 
         # Initialize components
         self.teaching_manager = TeachingModeManager(self)
-        self.data_logger = DataLogger(self, data_dir=data_dir)
+        self.camera_enabled = False
+
+        # Use camera logger if enabled and available
+        if enable_camera:
+            if CAMERA_AVAILABLE:
+                self.get_logger().info("Camera mode enabled - using CameraDataLogger")
+                self.data_logger = CameraDataLogger(
+                    self,
+                    data_dir=data_dir,
+                    enable_depth=enable_depth,
+                    resize_images=resize_images
+                )
+                self.camera_enabled = True
+            else:
+                self.get_logger().warn(
+                    "Camera mode requested but dependencies not available. "
+                    "Install cv_bridge and message_filters. Falling back to joint-only mode."
+                )
+                self.data_logger = DataLogger(self, data_dir=data_dir)
+        else:
+            self.data_logger = DataLogger(self, data_dir=data_dir)
 
         # Status publisher
         self.status_pub = self.create_publisher(String, '/teaching_status', 10)
@@ -113,12 +149,20 @@ class DirectTeachingNode(Node):
         print("="*60)
         print("\nControls:")
         print("  [SPACE]  - Start/Stop recording episode")
-        print("  [Q]      - Quit and disable teaching mode")
-        print("  [R]      - Reset episode counter")
         print("  [H]      - Move robot to home position")
+        print("  [S]      - Show robot status (joint positions, limits)")
+        print("  [E]      - Error recovery (use when robot has red LED)")
+        print("  [R]      - Reset episode counter")
         print("  [C]      - Clear screen and show instructions")
+        if self.camera_enabled:
+            print("  [V]      - Show camera/sync status")
+        print("  [Q]      - Quit and disable teaching mode")
         print("\nStatus:")
         print(f"  Teaching Mode: {'ENABLED' if self.teaching_manager.is_enabled() else 'DISABLED'}")
+        if self.camera_enabled:
+            print(f"  Camera Mode: ENABLED (RGB + Depth)")
+        else:
+            print(f"  Camera Mode: DISABLED (joint-only)")
         print(f"  Total Episodes: {self.data_logger.get_total_episodes()}")
         print(f"  Data Directory: {self.data_logger.data_dir}")
         print("="*60 + "\n")
@@ -209,6 +253,61 @@ class DirectTeachingNode(Node):
         print("\033[2J\033[H")  # ANSI escape code to clear screen
         self.print_instructions()
 
+    def handle_status(self):
+        """Show current robot status."""
+        self.teaching_manager.print_status()
+
+    def handle_error_recovery(self):
+        """Handle error recovery - attempt to recover and resume teaching mode."""
+        if self.data_logger.is_recording_active():
+            self.get_logger().warn("Stopping recording before recovery...")
+            self.data_logger.stop_episode(save=True)
+
+        print("\n" + "-"*60)
+        print("  ERROR RECOVERY")
+        print("-"*60)
+
+        if self.teaching_manager.recover_and_resume():
+            print("✓ Recovery successful! Teaching mode is now active.")
+            print("  You can now move the robot arm manually.")
+        else:
+            print("✗ Recovery failed!")
+            print("  Try the following:")
+            print("  1. Check if robot has a physical E-Stop engaged")
+            print("  2. Use Conty app to reset errors")
+            print("  3. Press [H] to move to home position first")
+            print("  4. Restart the robot if necessary")
+
+        print("-"*60 + "\n")
+
+    def handle_camera_status(self):
+        """Show camera synchronization status."""
+        if not self.camera_enabled:
+            print("\n  Camera mode is not enabled.")
+            print("  Run with: -p enable_camera:=true\n")
+            return
+
+        print("\n" + "-"*60)
+        print("  CAMERA SYNC STATUS")
+        print("-"*60)
+
+        sync_status = self.data_logger.get_sync_status()
+
+        print(f"  Recording: {'YES' if sync_status['is_recording'] else 'NO'}")
+        print(f"  Sync Callbacks: {sync_status['sync_callback_count']}")
+        print(f"  Current Samples: {sync_status['current_samples']}")
+        print(f"  RGB Frames: {sync_status['rgb_frames']}")
+        print(f"  Depth Frames: {sync_status['depth_frames']}")
+        print(f"  Depth Enabled: {sync_status['depth_enabled']}")
+
+        if sync_status['is_recording']:
+            duration = self.data_logger.get_current_duration()
+            if duration > 0:
+                rate = sync_status['current_samples'] / duration
+                print(f"  Effective Rate: {rate:.1f} Hz")
+
+        print("-"*60 + "\n")
+
     def run(self):
         """
         Main control loop - processes keyboard input.
@@ -235,6 +334,15 @@ class DirectTeachingNode(Node):
 
                 elif ord(key) == KEYCODE_C:
                     self.handle_clear_screen()
+
+                elif ord(key) == KEYCODE_S:
+                    self.handle_status()
+
+                elif ord(key) == KEYCODE_E:
+                    self.handle_error_recovery()
+
+                elif ord(key) == KEYCODE_V:
+                    self.handle_camera_status()
 
                 # Small sleep to prevent CPU spinning
                 time.sleep(0.01)

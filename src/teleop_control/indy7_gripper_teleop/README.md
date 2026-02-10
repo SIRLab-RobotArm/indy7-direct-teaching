@@ -19,8 +19,8 @@ This package enables **direct teaching mode** on the Indy7 robot, allowing users
 - ✅ Multiple data formats (pickle, numpy, JSON metadata)
 - ✅ Automatic episode management
 - ✅ Safety monitoring (collision detection, joint limits)
+- ✅ **Camera integration** (RealSense D435) with synchronized RGB + Depth
 - 🔄 Future: Gripper integration (Mark 7)
-- 🔄 Future: Camera integration (RealSense D435)
 
 ## Installation
 
@@ -31,6 +31,21 @@ This package enables **direct teaching mode** on the Indy7 robot, allowing users
 - Python 3.8+
 - Neuromeka Python SDK: `pip3 install neuromeka`
 
+### Camera Prerequisites (Optional)
+
+For camera integration with RealSense D435:
+
+```bash
+# Install RealSense SDK and ROS2 package
+sudo apt install ros-humble-librealsense2* ros-humble-realsense2-camera
+
+# Install camera dependencies
+sudo apt install ros-humble-cv-bridge ros-humble-message-filters ros-humble-image-transport
+
+# Install OpenCV for Python (for image resizing)
+pip3 install opencv-python
+```
+
 ### Build Package
 
 ```bash
@@ -38,6 +53,154 @@ cd ~/pipet_physical_ai_ws
 colcon build --packages-select indy7_gripper_teleop
 source install/setup.bash
 ```
+
+## Quick Start (직접교시 빠른 시작)
+
+### Step 0: 네트워크 설정 (최초 1회)
+
+로봇과 컴퓨터를 USB 이더넷 어댑터로 연결한 경우:
+
+```bash
+# USB 이더넷 어댑터에 고정 IP 설정
+sudo ip addr add 192.168.1.100/24 dev enx00e04c360046
+
+# 로봇 연결 확인
+ping 192.168.1.10
+```
+
+### Step 1: Terminal 1 - ROS2 환경 설정 및 드라이버 실행
+
+```bash
+# ROS2 환경 설정
+cd ~/Dev/ROS2/pipet_physical_ai_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Indy7 드라이버 실행
+ros2 launch indy_driver indy_bringup.launch.py \
+  indy_type:=indy7 \
+  indy_ip:=192.168.1.10
+```
+
+### Step 2: Terminal 2 - 직접교시 노드 실행
+
+```bash
+# ROS2 환경 설정
+cd ~/Dev/ROS2/pipet_physical_ai_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# 직접교시 노드 실행 (auto_enable_teaching=false 권장)
+ros2 run indy7_gripper_teleop teaching_control.py \
+  --ros-args \
+  -p data_dir:=~/teaching_data \
+  -p auto_enable_teaching:=false
+```
+
+### Step 3: 직접교시 사용
+
+1. **[H] 키** - 로봇을 홈 위치로 이동 (관절 한계 에러 방지)
+2. **[S] 키** - 현재 로봇 상태 확인 (관절 위치, 한계값 근접 경고)
+3. **[SPACE] 키** - 녹화 시작 (직접교시 모드 자동 활성화)
+4. **로봇 팔을 손으로 움직여서 시연**
+5. **[SPACE] 키** - 녹화 중지 및 저장
+6. **[E] 키** - 에러 발생 시 복구 (빨간 LED 시)
+7. **[Q] 키** - 종료
+
+---
+
+## Camera Integration (카메라 통합)
+
+### 카메라 모드로 직접교시 실행
+
+RealSense D435 카메라와 함께 로봇 데이터를 동기화하여 기록합니다.
+
+**중요: 실행 순서를 반드시 지켜야 합니다!**
+
+```bash
+# Terminal 1: 로봇 드라이버 (먼저 실행)
+cd ~/Dev/ROS2/pipet_physical_ai_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+ros2 launch indy_driver indy_bringup.launch.py indy_type:=indy7 indy_ip:=192.168.1.10
+
+# Terminal 2: RealSense 카메라 (두 번째 실행)
+cd ~/Dev/ROS2/pipet_physical_ai_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+ros2 launch realsense2_camera rs_launch.py \
+  enable_color:=true \
+  enable_depth:=true \
+  align_depth.enable:=true
+
+# Terminal 3: 직접교시 노드 (카메라가 실행된 후 마지막에 실행)
+cd ~/Dev/ROS2/pipet_physical_ai_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+ros2 run indy7_gripper_teleop teaching_control.py \
+  --ros-args \
+  -p data_dir:=~/teaching_data \
+  -p enable_camera:=true \
+  -p enable_depth:=true \
+  -p resize_images:=true
+```
+
+**카메라 토픽 확인:**
+```bash
+# 카메라 토픽이 발행되고 있는지 확인
+ros2 topic hz /camera/camera/color/image_raw
+ros2 topic hz /camera/camera/aligned_depth_to_color/image_raw
+```
+
+### Camera Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enable_camera` | `false` | Enable camera recording |
+| `enable_depth` | `true` | Record depth images |
+| `resize_images` | `true` | Resize to 224x224 for training |
+| `camera_fps` | `15` | Camera frame rate |
+
+### 카메라 데이터 형식
+
+카메라 모드 활성화 시 저장되는 데이터:
+
+```python
+{
+    'timestamps': np.array([...]),           # 동기화된 타임스탬프
+    'joint_positions': np.array([...]),      # 관절 각도 (radians)
+    'joint_velocities': np.array([...]),     # 관절 속도 (rad/s)
+    'joint_efforts': np.array([...]),        # 관절 토크 (N⋅m)
+    'rgb_images': np.array([...]),           # RGB 이미지 (N, 224, 224, 3)
+    'depth_images': np.array([...]),         # Depth 이미지 (N, 224, 224), uint16
+}
+```
+
+### 카메라 상태 확인
+
+녹화 중 **[V] 키**를 눌러 카메라 동기화 상태를 확인할 수 있습니다:
+
+```
+  CAMERA SYNC STATUS
+------------------------------------------------------------
+  Recording: YES
+  Sync Callbacks: 150
+  Current Samples: 150
+  RGB Frames: 150
+  Depth Frames: 150
+  Effective Rate: 15.0 Hz
+------------------------------------------------------------
+```
+
+---
 
 ## Usage
 
@@ -74,10 +237,13 @@ Once the node is running, you can control recording with:
 | Key | Action |
 |-----|--------|
 | `SPACE` | Start/Stop recording episode |
-| `Q` | Quit and disable teaching mode |
-| `R` | Reset episode counter |
 | `H` | Move robot to home position |
+| `S` | Show robot status (joint positions, limits) |
+| `E` | Error recovery (use when robot has red LED) |
+| `V` | Show camera/sync status (when camera enabled) |
+| `R` | Reset episode counter |
 | `C` | Clear screen and show instructions |
+| `Q` | Quit and disable teaching mode |
 
 ### Typical Workflow
 
@@ -161,15 +327,28 @@ velocities = data['joint_velocities']
    - Collects data at 20 Hz during recording
    - Saves episodes in multiple formats
 
-3. **DirectTeachingNode** ([direct_teaching_node.py](indy7_gripper_teleop/direct_teaching_node.py))
+3. **CameraDataLogger** ([camera_data_logger.py](indy7_gripper_teleop/camera_data_logger.py))
+   - Synchronized joint + camera data collection
+   - Uses `ApproximateTimeSynchronizer` for multi-sensor alignment
+   - Records RGB and depth images at ~15 Hz
+   - Resizes images to 224x224 for imitation learning
+
+4. **DirectTeachingNode** ([direct_teaching_node.py](indy7_gripper_teleop/direct_teaching_node.py))
    - Main coordination node
    - Keyboard input handling
    - Status publishing
 
 ### Topics
 
-**Subscribed:**
+**Subscribed (Joint-only mode):**
 - `/joint_states` (sensor_msgs/JointState) - Robot joint feedback
+
+**Subscribed (Camera mode):**
+- `/joint_states` (sensor_msgs/JointState) - Robot joint feedback
+- `/camera/camera/color/image_raw` (sensor_msgs/Image) - RGB image
+- `/camera/camera/aligned_depth_to_color/image_raw` (sensor_msgs/Image) - Aligned depth
+
+> **Note:** The camera topics have double namespace (`/camera/camera/...`) because the RealSense node runs with namespace `camera` and node name `camera`.
 
 **Published:**
 - `/teaching_status` (std_msgs/String) - Current recording status
@@ -195,6 +374,32 @@ Edit [config/data_collection_config.yaml](config/data_collection_config.yaml) to
 - Expected frequencies
 
 ## Troubleshooting
+
+### 네트워크 연결 실패 (grpc UNAVAILABLE)
+
+**에러 메시지:**
+```
+grpc._channel._InactiveRpcError: failed to connect to all addresses
+```
+
+**해결 방법:**
+1. 로봇 전원이 켜져 있는지 확인
+2. USB 이더넷 어댑터 IP 설정:
+   ```bash
+   sudo ip addr add 192.168.1.100/24 dev enx00e04c360046
+   ```
+3. 로봇 ping 테스트: `ping 192.168.1.10`
+4. Conty 앱에서 로봇 상태 확인 (녹색 = 정상)
+
+### 관절 한계 에러 (Joint Position Close To Limit)
+
+**증상:** 로봇에 빨간 불이 들어오고 "Stop Category2" 에러
+
+**해결 방법:**
+1. Conty 앱에서 에러 리셋
+2. `auto_enable_teaching:=false`로 노드 실행
+3. [H] 키로 홈 위치 이동 먼저 실행
+4. 그 후 [SPACE]로 녹화 시작
 
 ### Robot is not movable after launching
 
@@ -225,6 +430,46 @@ Edit [config/data_collection_config.yaml](config/data_collection_config.yaml) to
 - Verify joint_states frequency: `ros2 topic hz /joint_states`
 - Reduce file I/O by saving less frequently
 
+### Camera mode: 0 samples recorded
+
+**Symptoms:** Recording shows "0 sync frames, 0.0 Hz"
+
+**Causes & Solutions:**
+
+1. **Wrong execution order:** Camera must be running BEFORE teaching node
+   ```bash
+   # Correct order:
+   # 1. Robot driver → 2. Camera → 3. Teaching node
+   ```
+
+2. **Wrong topic names:** Check actual camera topic names
+   ```bash
+   ros2 topic list | grep camera
+   # Should see /camera/camera/color/image_raw (double namespace)
+   ```
+
+3. **Camera not publishing:** Check camera Hz
+   ```bash
+   ros2 topic hz /camera/camera/color/image_raw
+   # Should show ~15-30 Hz
+   ```
+
+### Camera USB 2.0 warning
+
+**Warning:** "Device USB type: 2.1 - Reduced performance is expected"
+
+**Solution:** Connect camera directly to USB 3.0 port (blue port) instead of through a hub.
+
+### Verifying camera data was recorded
+
+```python
+import numpy as np
+data = np.load('~/teaching_data/episode_XXX_camera.npz')
+print("Keys:", list(data.keys()))
+print("RGB images:", data['rgb_images'].shape)  # Should be (N, 224, 224, 3)
+print("Depth images:", data['depth_images'].shape)  # Should be (N, 224, 224)
+```
+
 ## Future Extensions
 
 ### Phase 2: Gripper Integration (Mark 7)
@@ -234,13 +479,13 @@ Will add:
 - Synchronized gripper position logging
 - Finger control during demonstration
 
-### Phase 3: Camera Integration (RealSense D435)
+### ~~Phase 3: Camera Integration (RealSense D435)~~ ✅ COMPLETED
 
-Will add:
-- RGB image capture
-- Depth image capture
-- Multi-sensor synchronization using `ApproximateTimeSynchronizer`
-- Vision-based learning support
+Implemented features:
+- ✅ RGB image capture (224x224 for training)
+- ✅ Depth image capture (aligned to color)
+- ✅ Multi-sensor synchronization using `ApproximateTimeSynchronizer`
+- ✅ Vision-based learning support with synchronized timestamps
 
 ### Phase 4: Isaac Sim Digital Twin
 
@@ -265,4 +510,6 @@ sirlab
 
 ---
 
-**Note:** This is an initial implementation focusing on Indy7 arm only. Gripper and camera integration will be added in future updates.
+**Note:** This implementation supports Indy7 arm with RealSense D435 camera integration. Gripper integration (Mark 7) will be added in future updates.
+
+**한글 문서:** [README_KR.md](README_KR.md)

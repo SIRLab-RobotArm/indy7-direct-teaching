@@ -17,6 +17,14 @@
   <depend>indy_interfaces</depend>
   <depend>rosbag2_py</depend>
 
+  <!-- Camera integration dependencies -->
+  <depend>cv_bridge</depend>
+  <depend>message_filters</depend>
+  <depend>image_transport</depend>
+
+  <!-- RealSense camera (optional - only needed when using camera) -->
+  <exec_depend>realsense2_camera</exec_depend>
+
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

@@ -14,6 +14,11 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(indy_interfaces REQUIRED)
 
+# Camera integration dependencies (optional)
+find_package(cv_bridge QUIET)
+find_package(message_filters QUIET)
+find_package(image_transport QUIET)
+
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
